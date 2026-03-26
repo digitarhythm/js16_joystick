@@ -11,6 +11,7 @@ K-SILVER JS16 TMR (Tunnel Magnetoresistance) ジョイスティックを QMK/Via
 - **移動平均フィルタ**: ADC ノイズの除去
 - **起動時キャリブレーション**: TMR センサーのウォームアップ待機と中心値の自動取得
 - **非対称レンジ補正**: 中心値が ADC レンジの中央にない場合でも方向ごとに正規化
+- **ボタン対応**: SW ピンによるマウスクリック（GPIO 直結、オプション）
 - **全パラメータカスタマイズ可能**: `config.h` の `#define` で上書き
 
 ## Requirements
@@ -74,6 +75,9 @@ keyboards/your_keyboard/
 ```c
 #define JOYSTICK_X_PIN GP28
 #define JOYSTICK_Y_PIN GP29
+
+// ボタン機能を使う場合（オプション）
+// #define JOYSTICK_SW_PIN GP13
 ```
 
 ### 5. keymap.c
@@ -112,7 +116,8 @@ SRC += analog.c js16_joystick.c
 1. `JOYSTICK_WARMUP_MS` ミリ秒待機 (TMR センサー安定化)
 2. 64 回のサンプリングで X/Y 軸の中心値をキャリブレーション
 3. 移動平均バッファを中心値で初期化
-4. デバッグ有効時、キャリブレーション結果をコンソール出力
+4. `JOYSTICK_SW_PIN` 定義時、ボタンピンを入力プルアップに設定
+5. デバッグ有効時、キャリブレーション結果をコンソール出力
 
 **注意:** 初期化中はスティックに触れないでください。触れた状態の値が中心値として記録されます。
 
@@ -130,7 +135,7 @@ SRC += analog.c js16_joystick.c
 
 **戻り値:**
 
-更新されたマウスレポート (`mouse_report.x` と `mouse_report.y` が設定される)
+更新されたマウスレポート (`mouse_report.x`、`mouse_report.y`、`JOYSTICK_SW_PIN` 定義時は `mouse_report.buttons` が設定される)
 
 **処理内容:**
 
@@ -140,6 +145,7 @@ SRC += analog.c js16_joystick.c
 4. 全倒し判定による速度キャップ切り替え
 5. 時間加速処理
 6. サブピクセル蓄積 + 整数ピクセル変換
+7. ボタン状態読み取り (`JOYSTICK_SW_PIN` 定義時)
 
 ## Parameter Reference
 
@@ -151,6 +157,46 @@ SRC += analog.c js16_joystick.c
 |---|---|---|
 | `JOYSTICK_X_PIN` | X 軸の ADC ピン | `GP28` |
 | `JOYSTICK_Y_PIN` | Y 軸の ADC ピン | `GP29` |
+
+### Button Parameters
+
+`JOYSTICK_SW_PIN` を定義するとボタン機能が有効になります。未定義の場合、ボタン関連の処理は一切含まれません。
+
+| Parameter | Default | Description |
+|---|---|---|
+| `JOYSTICK_SW_PIN` | (未定義) | SW ピンの GPIO。定義するとボタン機能有効 |
+| `JOYSTICK_SW_BUTTON` | `MOUSE_BTN1` | ボタンに割り当てるマウスボタン |
+
+**使用可能なマウスボタン定数:**
+
+| Constant | Description |
+|---|---|
+| `MOUSE_BTN1` | 左クリック (デフォルト) |
+| `MOUSE_BTN2` | 右クリック |
+| `MOUSE_BTN3` | 中クリック (ホイールクリック) |
+| `MOUSE_BTN4` | 戻る |
+| `MOUSE_BTN5` | 進む |
+
+**設定例:**
+
+```c
+// 左クリック（デフォルト）
+#define JOYSTICK_SW_PIN GP13
+
+// 右クリックに変更
+#define JOYSTICK_SW_PIN GP13
+#define JOYSTICK_SW_BUTTON MOUSE_BTN2
+```
+
+**配線:**
+
+JS16 の SW ピンは押下時に内部 GND に接続される（アクティブ LOW）ため、GPIO に直接接続するだけで動作します。外部プルアップ抵抗は不要です（MCU 内部プルアップを使用）。
+
+```
+JS16 SW -----> GPIOピン（内部プルアップ有効）
+```
+
+> **注意:** JS16 の SW ピンはキーマトリクスには直接接続できません。SW は押下時に内部 GND に短絡する 1 ピン出力のため、マトリクスの ROW-COL 間接続として機能しません。GPIO 直結で使用してください。
 
 ### Speed Parameters
 
@@ -283,7 +329,24 @@ Xr=450 cx=449 dx=0 | Yr=520 cy=519 dy=0 | h=0
 #define JOYSTICK_ACCEL_TIME  5000   // 5秒
 ```
 
-### デフォルト設定のまま使用
+### ボタン付き（左クリック）
+
+```c
+#define JOYSTICK_X_PIN       GP28
+#define JOYSTICK_Y_PIN       GP29
+#define JOYSTICK_SW_PIN      GP13
+```
+
+### ボタン付き（右クリック）
+
+```c
+#define JOYSTICK_X_PIN       GP28
+#define JOYSTICK_Y_PIN       GP29
+#define JOYSTICK_SW_PIN      GP13
+#define JOYSTICK_SW_BUTTON   MOUSE_BTN2
+```
+
+### デフォルト設定のまま使用（ボタンなし）
 
 ```c
 #define JOYSTICK_X_PIN GP28
@@ -320,10 +383,26 @@ JS16          RP2040-Zero
 ----          -----------
 VCC    ----->  3.3V
 GND    ----->  GND
-X out  ----->  GP28
-Y out  ----->  GP29
-SW     ----->  (任意の GPIO、本ライブラリでは未使用)
+X out  ----->  GP28  (ADC ピン)
+Y out  ----->  GP29  (ADC ピン)
+SW     ----->  GP13  (任意の GPIO、オプション)
 ```
+
+### EC12 エンコーダーフットプリント流用時の配線
+
+JS16 は EC12/EC11 ロータリーエンコーダーのフットプリントに実装できますが、ピンの役割が異なるため配線に注意が必要です。
+
+```
+EC12 ピン      JS16 ピン      接続先
+---------      ---------      ------
+Encoder A  --> X output   --> ADC ピン (GP28 等)
+Encoder GND -> GND        --> GND
+Encoder B  --> Y output   --> ADC ピン (GP29 等)
+Switch 1   --> VCC        --> 3.3V 電源ライン (※)
+Switch 2   --> SW         --> GPIO ピン (※)
+```
+
+> **(※) 注意:** EC12 のスイッチピンは通常キーマトリクスの ROW/COL に接続されています。JS16 の VCC は常時 3.3V 給電が必要なため、Switch 1 のパッドが 3.3V 電源ラインに接続されていることを確認してください。Switch 2 (SW) はマトリクスではなく GPIO に直結する必要があります。
 
 ## Troubleshooting
 
@@ -346,6 +425,18 @@ SW     ----->  (任意の GPIO、本ライブラリでは未使用)
 - TMR センサーの中心出力が ADC レンジの中央にない場合に発生します
 - 本ライブラリは方向ごとに自動スケーリングするため、通常は問題になりません
 - 極端に非対称な場合は `JOYSTICK_ADC_MIN` / `JOYSTICK_ADC_MAX` を実測値に合わせてください
+
+### ボタンが反応しない
+
+- `config.h` で `JOYSTICK_SW_PIN` が定義されているか確認
+- SW ピンが GPIO に直接接続されているか確認（キーマトリクス経由では動作しません）
+- テスターで SW ピンと GND 間を計測し、押下時に導通するか確認
+- `JOYSTICK_DEBUG 1` でコンソール出力を確認し、`mouse_report.buttons` の値を確認
+
+### ボタンが押しっぱなしになる
+
+- SW ピンが GND にショートしていないか確認
+- 配線が正しいか確認（SW ピンはアクティブ LOW: 押すと GND に接続）
 
 ### 4 方向にしか動かない
 

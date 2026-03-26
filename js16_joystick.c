@@ -93,6 +93,11 @@ void js16_init(void) {
         buf_y[i] = center_y;
     }
 
+#ifdef JOYSTICK_SW_PIN
+    // ボタンピンを入力プルアップに設定
+    setPinInputHigh(JOYSTICK_SW_PIN);
+#endif
+
 #if JOYSTICK_DEBUG
     uprintf("JS16 center: X=%u Y=%u\n", center_x, center_y);
 #endif
@@ -142,6 +147,15 @@ report_mouse_t js16_update(report_mouse_t mouse_report) {
     mouse_report.y = (int8_t)constrain(subpx_y / 100, -127, 127);
     subpx_x -= mouse_report.x * 100;
     subpx_y -= mouse_report.y * 100;
+
+#ifdef JOYSTICK_SW_PIN
+    // ボタン読み取り（アクティブLOW: 押すとGNDに接続）
+    if (readPin(JOYSTICK_SW_PIN) == 0) {
+        mouse_report.buttons |= JOYSTICK_SW_BUTTON;
+    } else {
+        mouse_report.buttons &= ~JOYSTICK_SW_BUTTON;
+    }
+#endif
 
 #if JOYSTICK_DEBUG
     if (++debug_timer >= 100) {

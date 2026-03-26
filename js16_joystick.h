@@ -27,6 +27,14 @@
 
 // ===== オプションパラメータ（config.h で上書き可能） =====
 
+// ボタンピン（定義するとマウスクリック機能が有効になる）
+// #define JOYSTICK_SW_PIN GP13
+
+// ボタンに割り当てるマウスボタン
+#ifndef JOYSTICK_SW_BUTTON
+#define JOYSTICK_SW_BUTTON MOUSE_BTN1   // 左クリック
+#endif
+
 // 中心付近の不感帯（ADC値）
 #ifndef JOYSTICK_DEADZONE
 #define JOYSTICK_DEADZONE    40
