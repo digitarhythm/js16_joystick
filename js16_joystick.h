@@ -1,5 +1,5 @@
 // Copyright 2024 Hajime Oh-yake (@digitarhythm)
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 //
 // JS16 TMR Joystick Library for QMK
 // K-SILVER JS16 TMR ジョイスティックをマウスカーソル操作に使用するライブラリ
@@ -48,20 +48,15 @@
 #define JOYSTICK_ADC_MAX   1023
 #endif
 
-// 速度設定（x100スケール: 100 = 1.0ピクセル/サイクル）
+// 速度設定（x1000スケール: 1000 = 1.0ピクセル/サイクル）
 #ifndef JOYSTICK_MAX_SPEED
-#define JOYSTICK_MAX_SPEED  800    // 全倒し時の最大速度（8.0）
+#define JOYSTICK_MAX_SPEED  8000   // 全倒し時の最大速度（8.0）
 #endif
 #ifndef JOYSTICK_NORM_SPEED
-#define JOYSTICK_NORM_SPEED 200    // 通常範囲の最大速度（2.0）
+#define JOYSTICK_NORM_SPEED 2000   // 通常範囲の最大速度（2.0）
 #endif
 #ifndef JOYSTICK_MID_SPEED
-#define JOYSTICK_MID_SPEED   10    // THRESHOLD%傾斜時の速度（0.1）
-#endif
-
-// 速度カーブ設定
-#ifndef JOYSTICK_THRESHOLD
-#define JOYSTICK_THRESHOLD   75    // 加速が切り替わる傾斜%（0-100）
+#define JOYSTICK_MID_SPEED   100   // THRESHOLD%傾斜時の速度（0.1）
 #endif
 
 // 全倒し判定（raw値がこの範囲外で全倒し）

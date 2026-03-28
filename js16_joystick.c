@@ -1,5 +1,5 @@
 // Copyright 2024 Hajime Oh-yake (@digitarhythm)
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 //
 // JS16 TMR Joystick Library for QMK
 
@@ -21,11 +21,12 @@ static uint16_t buf_y[JOYSTICK_SMOOTHING];
 static uint8_t  buf_idx = 0;
 
 // サブピクセル蓄積用
-static int16_t subpx_x = 0;
-static int16_t subpx_y = 0;
+static int32_t subpx_x = 0;
+static int32_t subpx_y = 0;
 
 // 時間加速カウンタ
-static uint16_t hold_counter = 0;
+static uint16_t hold_counter = 0;       // 通常加速用
+static uint16_t full_tilt_counter = 0;  // 全倒し加速用
 
 // デバッグタイマー
 static uint16_t debug_timer = 0;
@@ -39,7 +40,8 @@ static uint16_t read_smoothed(pin_t pin, uint16_t *buf) {
     return sum / JOYSTICK_SMOOTHING;
 }
 
-static int16_t get_joystick_delta(uint16_t val, uint16_t center) {
+// 軸ごとの正規化（-1000〜+1000 にスケーリング）
+static int16_t normalize_axis(uint16_t val, uint16_t center) {
     int16_t delta = (int16_t)val - (int16_t)center;
 
     if (abs(delta) < JOYSTICK_DEADZONE) return 0;
@@ -47,29 +49,32 @@ static int16_t get_joystick_delta(uint16_t val, uint16_t center) {
     // デッドゾーン分を差し引く
     int16_t normalized = (delta > 0) ? (delta - JOYSTICK_DEADZONE) : (delta + JOYSTICK_DEADZONE);
 
-    // 方向ごとに実際の範囲でスケーリング
+    // 方向ごとに実際の範囲で -1000〜+1000 にスケーリング
     int16_t range = (delta > 0)
         ? (JOYSTICK_ADC_MAX - center - JOYSTICK_DEADZONE)
         : (center - JOYSTICK_ADC_MIN - JOYSTICK_DEADZONE);
     if (range < 1) range = 1;
 
-    // 2段階カーブ（x100スケール）
-    int8_t sign = (normalized > 0) ? 1 : -1;
-    int32_t abs_norm = abs(normalized);
-    int32_t threshold = (int32_t)range * JOYSTICK_THRESHOLD / 100;
-    int32_t speed;
-    if (threshold < 1) threshold = 1;
-    if (abs_norm <= threshold) {
-        speed = abs_norm * JOYSTICK_MID_SPEED / threshold;
-    } else {
-        int32_t remain = range - threshold;
-        if (remain < 1) remain = 1;
-        speed = JOYSTICK_MID_SPEED
-              + (abs_norm - threshold) * (JOYSTICK_MAX_SPEED - JOYSTICK_MID_SPEED)
-              / remain;
-    }
+    int32_t scaled = (int32_t)normalized * 1000 / range;
+    return (int16_t)constrain(scaled, -1000, 1000);
+}
 
-    return (int16_t)constrain(sign * speed, -JOYSTICK_MAX_SPEED, JOYSTICK_MAX_SPEED);
+// 速度カーブ（0〜1000 の傾斜率 → x1000スケールの速度）
+// 二乗カーブ: 傾け始めは超低速、大きく倒すほど加速
+static int32_t apply_speed_curve(int32_t ratio) {
+    return ratio * ratio * JOYSTICK_MID_SPEED / (1000 * 1000);
+}
+
+// 簡易整数平方根（ニュートン法）
+static uint32_t isqrt(uint32_t n) {
+    if (n == 0) return 0;
+    uint32_t x = n;
+    uint32_t y = (x + 1) / 2;
+    while (y < x) {
+        x = y;
+        y = (x + n / x) / 2;
+    }
+    return x;
 }
 
 void js16_init(void) {
@@ -108,45 +113,67 @@ report_mouse_t js16_update(report_mouse_t mouse_report) {
     uint16_t smooth_y = read_smoothed(JOYSTICK_Y_PIN, buf_y);
     buf_idx = (buf_idx + 1) % JOYSTICK_SMOOTHING;
 
-    int16_t base_dx = get_joystick_delta(smooth_x, center_x);
-    int16_t base_dy = get_joystick_delta(smooth_y, center_y);
+    // 各軸を -1000〜+1000 に正規化
+    int16_t norm_x = normalize_axis(smooth_x, center_x);
+    int16_t norm_y = normalize_axis(smooth_y, center_y);
 
-    if (base_dx != 0 || base_dy != 0) {
-        // スティック操作中: hold_counterを増加
+    if (norm_x != 0 || norm_y != 0) {
+        // 通常加速カウンタ
         if (hold_counter < JOYSTICK_ACCEL_MAX_COUNT) {
             hold_counter++;
         }
 
-        // 軸ごとに全倒し判定
-        bool full_x = (smooth_x <= JOYSTICK_FULL_LOW) || (smooth_x >= JOYSTICK_FULL_HIGH);
-        bool full_y = (smooth_y <= JOYSTICK_FULL_LOW) || (smooth_y >= JOYSTICK_FULL_HIGH);
-        int32_t cap_x = full_x ? JOYSTICK_MAX_SPEED : JOYSTICK_NORM_SPEED;
-        int32_t cap_y = full_y ? JOYSTICK_MAX_SPEED : JOYSTICK_NORM_SPEED;
+        // 合成ベクトルの大きさ（0〜1000）を計算
+        uint32_t magnitude = isqrt((uint32_t)((int32_t)norm_x * norm_x + (int32_t)norm_y * norm_y));
+        if (magnitude > 1000) magnitude = 1000;
 
-        // 時間経過で加速（x100スケール）
-        int8_t sign_x = (base_dx > 0) ? 1 : (base_dx < 0) ? -1 : 0;
-        int8_t sign_y = (base_dy > 0) ? 1 : (base_dy < 0) ? -1 : 0;
-        int32_t abs_dx = abs(base_dx);
-        int32_t abs_dy = abs(base_dy);
-        if (abs_dx > cap_x) abs_dx = cap_x;
-        if (abs_dy > cap_y) abs_dy = cap_y;
-        int32_t accel_dx = abs_dx + (cap_x - abs_dx) * hold_counter / JOYSTICK_ACCEL_MAX_COUNT;
-        int32_t accel_dy = abs_dy + (cap_y - abs_dy) * hold_counter / JOYSTICK_ACCEL_MAX_COUNT;
+        // 合成ベクトルに対して速度カーブを適用
+        int32_t base_speed = apply_speed_curve(magnitude);
+
+        // Phase 1: base_speed → NORM_SPEED（二乗カーブで加速）
+        int32_t progress1 = (int32_t)hold_counter * hold_counter
+                          / ((int32_t)JOYSTICK_ACCEL_MAX_COUNT * JOYSTICK_ACCEL_MAX_COUNT / 1000);
+        int32_t phase1_speed = base_speed + (JOYSTICK_NORM_SPEED - base_speed) * progress1 / 1000;
+        phase1_speed = constrain(phase1_speed, base_speed, JOYSTICK_NORM_SPEED);
+
+        // 全倒し判定
+        bool full_tilt = (smooth_x <= JOYSTICK_FULL_LOW) || (smooth_x >= JOYSTICK_FULL_HIGH)
+                      || (smooth_y <= JOYSTICK_FULL_LOW) || (smooth_y >= JOYSTICK_FULL_HIGH);
+
+        int32_t final_speed = phase1_speed;
+
+        if (full_tilt) {
+            // Phase 2: NORM_SPEED → MAX_SPEED（二乗カーブで加速、別カウンタ）
+            if (full_tilt_counter < JOYSTICK_ACCEL_MAX_COUNT) {
+                full_tilt_counter++;
+            }
+            int32_t progress2 = (int32_t)full_tilt_counter * full_tilt_counter
+                              / ((int32_t)JOYSTICK_ACCEL_MAX_COUNT * JOYSTICK_ACCEL_MAX_COUNT / 1000);
+            final_speed = phase1_speed + (JOYSTICK_MAX_SPEED - phase1_speed) * progress2 / 1000;
+            final_speed = constrain(final_speed, phase1_speed, JOYSTICK_MAX_SPEED);
+        } else {
+            full_tilt_counter = 0;
+        }
+
+        // 合成速度を各軸に方向比率で分配
+        int32_t speed_x = final_speed * (int32_t)norm_x / (int32_t)magnitude;
+        int32_t speed_y = final_speed * (int32_t)norm_y / (int32_t)magnitude;
 
         // サブピクセル蓄積
-        subpx_x += sign_x * constrain(accel_dx, 0, cap_x);
-        subpx_y += sign_y * constrain(accel_dy, 0, cap_y);
+        subpx_x += speed_x;
+        subpx_y += speed_y;
     } else {
         hold_counter = 0;
+        full_tilt_counter = 0;
         subpx_x = 0;
         subpx_y = 0;
     }
 
     // 蓄積値から整数ピクセルを取り出す
-    mouse_report.x = (int8_t)constrain(subpx_x / 100, -127, 127);
-    mouse_report.y = (int8_t)constrain(subpx_y / 100, -127, 127);
-    subpx_x -= mouse_report.x * 100;
-    subpx_y -= mouse_report.y * 100;
+    mouse_report.x = (int8_t)constrain(subpx_x / 1000, -127, 127);
+    mouse_report.y = (int8_t)constrain(subpx_y / 1000, -127, 127);
+    subpx_x -= mouse_report.x * 1000;
+    subpx_y -= mouse_report.y * 1000;
 
 #ifdef JOYSTICK_SW_PIN
     // ボタン読み取り（アクティブLOW: 押すとGNDに接続）
@@ -160,9 +187,9 @@ report_mouse_t js16_update(report_mouse_t mouse_report) {
 #if JOYSTICK_DEBUG
     if (++debug_timer >= 100) {
         debug_timer = 0;
-        uprintf("Xr=%u cx=%u dx=%d | Yr=%u cy=%u dy=%d | h=%u\n",
-                smooth_x, center_x, mouse_report.x,
-                smooth_y, center_y, mouse_report.y,
+        uprintf("Xr=%u cx=%u dx=%d nx=%d | Yr=%u cy=%u dy=%d ny=%d | h=%u\n",
+                smooth_x, center_x, mouse_report.x, norm_x,
+                smooth_y, center_y, mouse_report.y, norm_y,
                 hold_counter);
     }
 #endif
