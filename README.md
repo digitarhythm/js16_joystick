@@ -33,7 +33,7 @@ K-SILVER JS16 TMR (Tunnel Magnetoresistance) ジョイスティックを QMK/Via
 
 ### 1. ファイルの配置
 
-`js16_joystick.h` と `js16_joystick.c` をキーボードディレクトリにコピーします。
+`js16_joystick.h`、`js16_joystick.c`、`halconf.h`、`mcuconf.h` をキーボードディレクトリにコピーします。既に `halconf.h` や `mcuconf.h` が存在する場合は、手順 2・3 の内容を既存ファイルに追記してください。
 
 ```
 keyboards/your_keyboard/
