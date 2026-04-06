@@ -46,14 +46,14 @@ static uint16_t read_smoothed(pin_t pin, uint16_t *buf) {
 }
 
 // 軸ごとの正規化（-1000〜+1000 にスケーリング、デッドゾーンなし）
-static int16_t normalize_axis(uint16_t val, uint16_t center) {
+static int16_t normalize_axis(uint16_t val, uint16_t center, uint16_t adc_min, uint16_t adc_max) {
     int16_t delta = (int16_t)val - (int16_t)center;
     if (delta == 0) return 0;
 
     // 方向ごとに実際の範囲で -1000〜+1000 にスケーリング
     int16_t range = (delta > 0)
-        ? (JOYSTICK_ADC_MAX - center)
-        : (center - JOYSTICK_ADC_MIN);
+        ? (adc_max - center)
+        : (center - adc_min);
     if (range < 1) range = 1;
 
     int32_t scaled = (int32_t)delta * 1000 / range;
@@ -109,8 +109,8 @@ report_mouse_t analog_stick_update(report_mouse_t mouse_report) {
     buf_idx = (buf_idx + 1) % JOYSTICK_SMOOTHING;
 
     // 各軸を -1000〜+1000 に正規化
-    int16_t norm_x = normalize_axis(smooth_x, center_x);
-    int16_t norm_y = normalize_axis(smooth_y, center_y);
+    int16_t norm_x = normalize_axis(smooth_x, center_x, JOYSTICK_ADC_X_MIN, JOYSTICK_ADC_X_MAX);
+    int16_t norm_y = normalize_axis(smooth_y, center_y, JOYSTICK_ADC_Y_MIN, JOYSTICK_ADC_Y_MAX);
 
     // 合成ベクトルの大きさ（0〜1000）を計算
     uint32_t magnitude = isqrt((uint32_t)((int32_t)norm_x * norm_x + (int32_t)norm_y * norm_y));

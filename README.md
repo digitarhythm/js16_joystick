@@ -339,10 +339,19 @@ Joystick SW -----> GPIOピン（内部プルアップ有効）
 
 | Parameter | Default | Description |
 |---|---|---|
-| `JOYSTICK_ADC_MIN` | `2` | ADC の実測最小値 |
-| `JOYSTICK_ADC_MAX` | `1023` | ADC の実測最大値 |
+| `JOYSTICK_ADC_MIN` | `0` | ADC の実測最小値（X/Y 共通デフォルト） |
+| `JOYSTICK_ADC_MAX` | `1023` | ADC の実測最大値（X/Y 共通デフォルト） |
+| `JOYSTICK_ADC_X_MIN` | `JOYSTICK_ADC_MIN` | X 軸の実測最小値 |
+| `JOYSTICK_ADC_X_MAX` | `JOYSTICK_ADC_MAX` | X 軸の実測最大値 |
+| `JOYSTICK_ADC_Y_MIN` | `JOYSTICK_ADC_MIN` | Y 軸の実測最小値 |
+| `JOYSTICK_ADC_Y_MAX` | `JOYSTICK_ADC_MAX` | Y 軸の実測最大値 |
 
-実際のジョイスティックで計測した値を設定してください。方向ごとのスケーリング計算に使用されます。
+X 軸と Y 軸で出力レンジが異なるジョイスティック（K-SILVER JH16 等）では、軸ごとに個別設定できます。`JOYSTICK_ADC_X_MIN` 等を定義しない場合は `JOYSTICK_ADC_MIN` / `JOYSTICK_ADC_MAX` が両軸に使用されます。
+
+```c
+// X/Y で出力レンジが違う場合の例
+#define JOYSTICK_ADC_Y_MAX  784   // Y軸の最大値が小さい場合
+```
 
 ### Filter Parameters
 
@@ -873,10 +882,19 @@ Joystick SW -----> GPIO pin (internal pull-up enabled)
 
 | Parameter | Default | Description |
 |---|---|---|
-| `JOYSTICK_ADC_MIN` | `2` | Measured minimum ADC value |
-| `JOYSTICK_ADC_MAX` | `1023` | Measured maximum ADC value |
+| `JOYSTICK_ADC_MIN` | `0` | Measured minimum ADC value (shared default for both axes) |
+| `JOYSTICK_ADC_MAX` | `1023` | Measured maximum ADC value (shared default for both axes) |
+| `JOYSTICK_ADC_X_MIN` | `JOYSTICK_ADC_MIN` | Measured minimum ADC value for X axis |
+| `JOYSTICK_ADC_X_MAX` | `JOYSTICK_ADC_MAX` | Measured maximum ADC value for X axis |
+| `JOYSTICK_ADC_Y_MIN` | `JOYSTICK_ADC_MIN` | Measured minimum ADC value for Y axis |
+| `JOYSTICK_ADC_Y_MAX` | `JOYSTICK_ADC_MAX` | Measured maximum ADC value for Y axis |
 
-Set these to values measured from your actual joystick. They are used in the per-direction scaling calculation.
+For joysticks where the X and Y axes have different output ranges (e.g. K-SILVER JH16), each axis can be configured independently. If `JOYSTICK_ADC_X_MIN` etc. are not defined, `JOYSTICK_ADC_MIN` / `JOYSTICK_ADC_MAX` are used for both axes.
+
+```c
+// Example: Y axis has a smaller maximum value
+#define JOYSTICK_ADC_Y_MAX  784
+```
 
 ### Filter Parameters
 

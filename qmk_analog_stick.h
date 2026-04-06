@@ -40,7 +40,7 @@
 #define JOYSTICK_DEADZONE    30
 #endif
 
-// ADC値の実測範囲
+// ADC値の実測範囲（共通デフォルト値）
 #ifndef JOYSTICK_ADC_MIN
 #define JOYSTICK_ADC_MIN      0
 #endif
@@ -48,9 +48,25 @@
 #define JOYSTICK_ADC_MAX   1023
 #endif
 
+// X軸ADC範囲（未定義の場合は JOYSTICK_ADC_MIN/MAX を使用）
+#ifndef JOYSTICK_ADC_X_MIN
+#define JOYSTICK_ADC_X_MIN JOYSTICK_ADC_MIN
+#endif
+#ifndef JOYSTICK_ADC_X_MAX
+#define JOYSTICK_ADC_X_MAX JOYSTICK_ADC_MAX
+#endif
+
+// Y軸ADC範囲（未定義の場合は JOYSTICK_ADC_MIN/MAX を使用）
+#ifndef JOYSTICK_ADC_Y_MIN
+#define JOYSTICK_ADC_Y_MIN JOYSTICK_ADC_MIN
+#endif
+#ifndef JOYSTICK_ADC_Y_MAX
+#define JOYSTICK_ADC_Y_MAX JOYSTICK_ADC_MAX
+#endif
+
 // 速度設定（x1000スケール: 1000 = 1.0ピクセル/サイクル）
 #ifndef JOYSTICK_MAX_SPEED
-#define JOYSTICK_MAX_SPEED  8000   // 最大速度（8.0）
+#define JOYSTICK_MAX_SPEED  6000   // 最大速度（8.0）
 #endif
 
 // 加速度設定
@@ -64,7 +80,7 @@
 // スティックを戻したとき、目標速度との差のこの割合ずつ減速する
 // 大きいほどスティックの戻し量に素早く追従する（0〜100）
 #ifndef JOYSTICK_DECEL_RATE
-#define JOYSTICK_DECEL_RATE   5
+#define JOYSTICK_DECEL_RATE   8
 #endif
 
 // 移動平均サンプル数
